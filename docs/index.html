@@ -1,0 +1,267 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>TIFFscope - Visual TIFF Explorer</title>
+<style>
+
+:root {
+  --orange: #EE6A1A;
+  --orange-dark: #B94A12;
+  --orange-bright: #FF9A45;
+  --peach: #FFE3CA;
+  --cream: #FFF8F0;
+  --white: #FFFFFF;
+  --charcoal: #292524;
+  --muted: #78716C;
+  --border: #EAD8C8;
+
+  font-family: system-ui, -apple-system, sans-serif;
+  color: var(--charcoal);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: var(--cream);
+}
+
+header {
+  background: var(--charcoal);
+  color: var(--white);
+  padding: 30px max(20px, calc((100vw - 1050px) / 2));
+  border-bottom: 5px solid var(--orange);
+}
+
+header h1 {
+  margin: 0 0 8px;
+  color: var(--orange-bright);
+}
+
+header p {
+  margin: 0;
+  color: #F5E7DC;
+}
+
+main {
+  max-width: 1050px;
+  margin: 28px auto;
+  padding: 0 18px;
+}
+
+.panel {
+  background: var(--white);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 24px;
+  margin-bottom: 20px;
+  box-shadow: 0 3px 12px rgba(70, 40, 20, 0.04);
+}
+
+h2 {
+  color: var(--orange-dark);
+}
+
+.note {
+  color: var(--muted);
+}
+
+.layout {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 24px;
+}
+
+.tiles {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+  max-width: 420px;
+}
+
+.tile {
+  aspect-ratio: 1;
+  border: 1px solid #F3B582;
+  border-radius: 8px;
+  background: var(--peach);
+  color: var(--charcoal);
+  cursor: pointer;
+  font: inherit;
+  font-weight: 600;
+  transition: background 0.15s ease;
+}
+
+.tile:hover {
+  background: var(--orange-bright);
+  color: var(--charcoal);
+}
+
+.tile.active,
+.tile.active:hover {
+  background: var(--orange-dark);
+  color: var(--white);
+  border-color: var(--orange-dark);
+}
+
+.range {
+  display: grid;
+  grid-template-columns: 60px 1fr 110px;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  text-align: left;
+  padding: 5px 0;
+  font: inherit;
+  color: var(--charcoal);
+}
+
+.bar {
+  background: #D6C3B3;
+  height: 17px;
+  border-radius: 4px;
+}
+
+.range.active .bar {
+  background: var(--orange);
+}
+
+.range small {
+  text-align: right;
+}
+
+pre {
+  background: #FFF3E8;
+  border: 1px solid var(--border);
+  border-left: 4px solid var(--orange);
+  border-radius: 8px;
+  padding: 15px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+a {
+  color: var(--orange-dark);
+  font-weight: 600;
+}
+
+a:hover {
+  color: var(--orange);
+}
+
+button:focus-visible {
+  outline: 3px solid var(--orange);
+  outline-offset: 3px;
+}
+
+@media (max-width: 650px) {
+  .layout {
+    grid-template-columns: 1fr;
+  }
+}
+</style>
+</head>
+<body>
+<header>
+    <h1>TIFFscope</h1>
+  <p>An interactive visual debugger for TIFF and GeoTIFF files</p>
+  <p>Explore image tiles, storage offsets and file structure.</p>
+</header>
+<main>
+  <section class="panel">
+    <h2>Interactive tile layout</h2>
+    <p class="note">Illustrative example - 768 × 768 pixels, nine 256 × 256 tiles, uncompressed.</p>
+    <p>Select a tile to inspect its pixel location and storage metadata.</p>
+    <div class="layout">
+      <div id="tiles" class="tiles" aria-label="Image tile grid"></div>
+      <div>
+        <h3>Selected tile</h3>
+        <pre id="details" aria-live="polite"></pre>
+      </div>
+    </div>
+  </section>
+  <section class="panel">
+    <h2>Storage offsets</h2>
+    <p class="note">Each row represents a tile and its illustrative byte offset. Bars are not proportional to file size.</p>
+    <div id="ranges"></div>
+  </section>
+  <section class="panel">
+    <h2>About this prototype</h2>
+    <p>TIFFscope aims to connect the logical tile/strip layout of TIFF and GeoTIFF images to their physical storage and structural diagnostics.</p>
+    <p><strong>Current limitation:</strong> This demonstration uses synthetic metadata. It does not yet parse uploaded TIFF files or use OCaml-TIFF to extract metadata.</p>
+    <a href="https://github.com/jyoti-bhogal/tiffscope">View source on GitHub</a>
+  </section>
+</main>
+<script>
+const imageWidth = 768;
+const tileSize = 256;
+const columns = imageWidth / tileSize;
+
+const tiles = Array.from({ length: 9 }, (_, index) => ({
+  index,
+  row: Math.floor(index / columns),
+  column: index % columns,
+  offset: 512 + index * 65536,
+  byteCount: 65536
+}));
+
+const grid = document.getElementById("tiles");
+const ranges = document.getElementById("ranges");
+const details = document.getElementById("details");
+
+function selectTile(index) {
+  const tile = tiles[index];
+
+  document.querySelectorAll(".tile").forEach((element, i) => {
+    element.classList.toggle("active", i === index);
+    element.setAttribute("aria-pressed", String(i === index));
+  });
+
+  document.querySelectorAll(".range").forEach((element, i) => {
+    element.classList.toggle("active", i === index);
+    element.setAttribute("aria-pressed", String(i === index));
+  });
+
+  details.textContent = JSON.stringify({
+    tile_index: tile.index,
+    row: tile.row,
+    column: tile.column,
+    pixel_x: tile.column * tileSize,
+    pixel_y: tile.row * tileSize,
+    width: tileSize,
+    height: tileSize,
+    offset: tile.offset,
+    byte_count: tile.byteCount,
+    end_offset_exclusive: tile.offset + tile.byteCount
+  }, null, 2);
+}
+
+tiles.forEach(tile => {
+  const button = document.createElement("button");
+  button.className = "tile";
+  button.textContent = `Tile ${tile.index}`;
+  button.addEventListener("click", () => selectTile(tile.index));
+  grid.appendChild(button);
+
+  const row = document.createElement("button");
+  row.className = "range";
+  row.innerHTML = `
+    <span>Tile ${tile.index}</span>
+    <span class="bar"></span>
+    <small>${tile.offset.toLocaleString()} B</small>
+  `;
+  row.addEventListener("click", () => selectTile(tile.index));
+  ranges.appendChild(row);
+});
+
+selectTile(0);
+</script>
+</body>
+</html>
